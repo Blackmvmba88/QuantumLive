@@ -1,4 +1,4 @@
-"""Pydantic models that describen pistas, cues y resultados de análisis."""
+"""Pydantic models that describe pistas, cues y resultados de análisis."""
 from __future__ import annotations
 
 from datetime import datetime
