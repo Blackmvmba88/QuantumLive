@@ -154,7 +154,7 @@ def obtener_track(track_id: UUID) -> metadata.Track:
 
 @app.patch("/playlist/{track_id}", response_model=metadata.Track)
 def actualizar_track(track_id: UUID, payload: ActualizarTrackPayload) -> metadata.Track:
-    updates = {k: v for k, v in payload.dict(exclude_unset=True).items() if v is not None}
+    updates = {k: v for k, v in payload.model_dump(exclude_unset=True).items() if v is not None}
     if not updates:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
