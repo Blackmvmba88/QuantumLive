@@ -102,9 +102,18 @@ def analizar_audio(
     if not ruta.exists():
         raise FileNotFoundError(f"No se encontró el archivo de audio: {ruta}")
 
-    y, sr = librosa.load(str(ruta))
-    tempo, beat_frames = librosa.beat.beat_track(y=y, sr=sr)
-    duracion = librosa.get_duration(y=y, sr=sr)
+    # Optimización: si no se necesitan cues, cargar solo para BPM
+    need_full_audio = bool(intervalos) or auto_cues
+    
+    if need_full_audio:
+        y, sr = librosa.load(str(ruta))
+        tempo, beat_frames = librosa.beat.beat_track(y=y, sr=sr)
+        duracion = librosa.get_duration(y=y, sr=sr)
+    else:
+        # Cargar con menor calidad para solo BPM (más rápido)
+        y, sr = librosa.load(str(ruta), sr=22050, mono=True)
+        tempo, beat_frames = librosa.beat.beat_track(y=y, sr=sr)
+        duracion = librosa.get_duration(y=y, sr=sr)
 
     if intervalos:
         intervalos_limpios = [
@@ -117,7 +126,7 @@ def analizar_audio(
     else:
         intervalos_limpios = []
 
-    cues = _extraer_cues(y, sr, intervalos_limpios, max_muestras_cue)
+    cues = _extraer_cues(y, sr, intervalos_limpios, max_muestras_cue) if intervalos_limpios else []
 
     return metadata.AnalysisResult(
         bpm=float(tempo),
