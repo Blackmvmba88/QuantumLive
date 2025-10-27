@@ -1,9 +1,13 @@
 """Integraciones con servicios externos para búsqueda musical."""
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Any, Callable, Dict, Optional, Tuple
 
 import requests
+
+# Session pool para reutilizar conexiones HTTP
+_session = requests.Session()
 
 
 def buscar_en_soundcloud(query: str, client_id: str) -> dict:
@@ -11,7 +15,7 @@ def buscar_en_soundcloud(query: str, client_id: str) -> dict:
 
     url = "https://api-v2.soundcloud.com/search/tracks"
     params = {"q": query, "client_id": client_id}
-    respuesta = requests.get(url, params=params, timeout=10)
+    respuesta = _session.get(url, params=params, timeout=10)
     respuesta.raise_for_status()
     return respuesta.json()
 
@@ -21,7 +25,7 @@ def buscar_en_itunes(query: str) -> dict:
 
     url = "https://itunes.apple.com/search"
     params = {"term": query, "media": "music"}
-    respuesta = requests.get(url, params=params, timeout=10)
+    respuesta = _session.get(url, params=params, timeout=10)
     respuesta.raise_for_status()
     return respuesta.json()
 
@@ -36,7 +40,7 @@ def buscar_en_youtube(query: str, api_key: str) -> dict:
         "q": query,
         "key": api_key,
     }
-    respuesta = requests.get(url, params=params, timeout=10)
+    respuesta = _session.get(url, params=params, timeout=10)
     respuesta.raise_for_status()
     return respuesta.json()
 
@@ -61,38 +65,42 @@ def buscar_en_todos(
     """Coordina búsquedas en múltiples plataformas y gestiona errores comunes."""
 
     resultados: Dict[str, Any] = {}
+    tareas: Dict[str, Tuple[Callable, tuple]] = {}
 
+    # Preparar tareas para ejecución paralela
     if soundcloud_client_id:
-        try:
-            resultados["soundcloud"] = buscar_en_soundcloud(query, soundcloud_client_id)
-        except requests.RequestException as exc:  # pragma: no cover - solo errores HTTP
-            resultados["soundcloud"] = {"error": str(exc)}
+        tareas["soundcloud"] = (buscar_en_soundcloud, (query, soundcloud_client_id))
     else:
         resultados["soundcloud"] = {"error": "client_id no proporcionado"}
 
     if include_itunes:
-        try:
-            resultados["itunes"] = buscar_en_itunes(query)
-        except requests.RequestException as exc:  # pragma: no cover - solo errores HTTP
-            resultados["itunes"] = {"error": str(exc)}
+        tareas["itunes"] = (buscar_en_itunes, (query,))
 
     if youtube_api_key:
-        try:
-            resultados["youtube"] = buscar_en_youtube(query, youtube_api_key)
-        except requests.RequestException as exc:  # pragma: no cover
-            resultados["youtube"] = {"error": str(exc)}
+        tareas["youtube"] = (buscar_en_youtube, (query, youtube_api_key))
     else:
         resultados["youtube"] = {"error": "api_key no proporcionada"}
 
     if include_suno:
         if suno_token:
-            try:
-                resultados["suno"] = buscar_en_suno(query, suno_token)
-            except NotImplementedError as exc:
-                resultados["suno"] = {"error": str(exc)}
-            except requests.RequestException as exc:  # pragma: no cover
-                resultados["suno"] = {"error": str(exc)}
+            tareas["suno"] = (buscar_en_suno, (query, suno_token))
         else:
             resultados["suno"] = {"error": "token de Suno no proporcionado"}
+
+    # Ejecutar tareas en paralelo
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        futures = {
+            executor.submit(func, *args): nombre
+            for nombre, (func, args) in tareas.items()
+        }
+        
+        for future in as_completed(futures):
+            nombre = futures[future]
+            try:
+                resultados[nombre] = future.result()
+            except NotImplementedError as exc:
+                resultados[nombre] = {"error": str(exc)}
+            except requests.RequestException as exc:  # pragma: no cover - solo errores HTTP
+                resultados[nombre] = {"error": str(exc)}
 
     return resultados
