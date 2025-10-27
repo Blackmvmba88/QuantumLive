@@ -75,10 +75,13 @@ def obtener(track_id: UUID | str) -> Optional[metadata.Track]:
 **Beneficio**: ~40-60% más rápido para análisis de solo BPM, usando menos memoria.
 
 ```python
+# Constante definida para claridad y mantenibilidad
+BPM_ANALYSIS_SAMPLE_RATE = 22050
+
 if need_full_audio:
     y, sr = librosa.load(str(ruta))  # Full quality
 else:
-    y, sr = librosa.load(str(ruta), sr=22050, mono=True)  # Reduced quality for BPM only
+    y, sr = librosa.load(str(ruta), sr=BPM_ANALYSIS_SAMPLE_RATE, mono=True)
 ```
 
 ## Impacto General
@@ -91,11 +94,12 @@ else:
 
 ## Consideraciones
 
-### Thread Safety
-- Los cachés actuales son seguros para un proceso single-threaded
-- Para deployment multi-worker (gunicorn), considerar:
-  - Cache distribuido (Redis)
+### Thread Safety y Async Safety
+- Los cachés actuales son seguros para un proceso single-threaded síncrono
+- Para deployment multi-worker o async (gunicorn, uvicorn con workers):
+  - Cache distribuido (Redis, Memcached)
   - Locks para escrituras concurrentes
+  - Para async: usar locks async-safe (`asyncio.Lock`)
 
 ### Invalidación de Caché
 - El caché de playlist se invalida automáticamente en escrituras

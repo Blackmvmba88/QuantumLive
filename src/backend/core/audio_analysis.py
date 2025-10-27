@@ -10,6 +10,8 @@ import librosa
 from . import metadata
 
 DEFAULT_MAX_MUESTRAS_CUE = 2048
+# Sample rate optimizado para análisis de solo BPM (más rápido, menor memoria)
+BPM_ANALYSIS_SAMPLE_RATE = 22050
 
 
 def _downsample(segmento: np.ndarray, max_muestras: int) -> List[float]:
@@ -111,7 +113,7 @@ def analizar_audio(
         duracion = librosa.get_duration(y=y, sr=sr)
     else:
         # Cargar con menor calidad para solo BPM (más rápido)
-        y, sr = librosa.load(str(ruta), sr=22050, mono=True)
+        y, sr = librosa.load(str(ruta), sr=BPM_ANALYSIS_SAMPLE_RATE, mono=True)
         tempo, beat_frames = librosa.beat.beat_track(y=y, sr=sr)
         duracion = librosa.get_duration(y=y, sr=sr)
 
